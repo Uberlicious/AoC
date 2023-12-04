@@ -4,61 +4,75 @@ fn main() {
     dbg!(output);
 }
 
-fn check_surrounding(map: &Vec<Vec<char>>, line: usize, s: usize, e: usize) -> bool {
+fn check_surrounding(map: &Vec<Vec<char>>, line: usize, s: usize, e: usize, number: &u32) -> u32 {
     // .....
     // .123.
     // .....
 
-    let mut left = s;
-    let mut right = e;
+    let mut matches = 0;
+
+    let mut l = s;
+    let mut r = e;
 
     if s > 0 {
-        left = s - 1;
+        l = s - 1;
     }
 
     if e < map[line].len() {
-        right = s + 1;
+        r = e + 1;
     }
 
+    print!("top: ");
     // check above
     if line > 0 {
-        for top in &map[line - 1][left..=right] {
-            if !top.is_ascii_digit() && *top != '.' {
-                return true;
+        for top in &map[line - 1][l..=r] {
+            print!("{}", top);
+            if *top != '.' {
+                matches += 1;
             }
         }
-    }
-
-    if line < map.len() - 1 {
-        for bottom in &map[line + 1][left..=right] {
-            if !bottom.is_ascii_digit() && *bottom != '.' {
-                return true;
-            }
-        }
+        println!();
     }
 
     // check left
+    print!("mid: ");
     if s > 0 {
-        let left = map[line][left];
-        if !left.is_ascii_digit() && left != '.' {
-            return true;
+        let left = map[line][l];
+        print!("{left}");
+        if left != '.' {
+            matches += 1;
         }
     }
 
+    print!("{number}");
     // check right
-    if e < map[line].len() - 1 {
-        let right = map[line][right];
-        if !right.is_ascii_digit() && right != '.' {
-            return true;
+    if e < map[line].len() {
+        let right = map[line][r];
+        println!("{right}");
+        if right != '.' {
+            matches += 1;
         }
     }
 
-    false
+    print!("bot: ");
+    // check below
+    if line < map.len() - 1 {
+        for bottom in &map[line + 1][l..=r] {
+            print!("{}", bottom);
+            if *bottom != '.' {
+                matches += 1;
+            }
+        }
+        println!()
+    }
+
+    matches
 }
 
 fn process(input: &str) -> u32 {
     let input = input.replace("\r\n", "\n");
     let lines = input.split("\n").collect::<Vec<_>>();
+
     let mut holder: Vec<u32> = vec![];
 
     let lines = lines
@@ -67,6 +81,7 @@ fn process(input: &str) -> u32 {
         .collect::<Vec<Vec<char>>>();
 
     for (lidx, line) in lines.iter().enumerate() {
+        println!("lidx: {} line: {:?}", lidx, line);
         let mut start_idx: Option<usize> = None;
         let mut end_idx: Option<usize> = None;
 
@@ -96,17 +111,12 @@ fn process(input: &str) -> u32 {
                 .parse::<u32>()
                 .unwrap();
 
-            // let number: u32 = num
-            //     .iter()
-            //     .map(|c| c.to_string().parse::<u32>().expect("number"))
-            //     .collect::<Vec<u32>>()
-            //     .iter()
-            //     .sum();
+            println!();
+            let matches = check_surrounding(&lines, lidx, l, r, &number);
 
-            println!("number: {}", number);
-            if check_surrounding(&lines, lidx, l, r) {
-                holder.push(*number);
-            }
+            println!("\nnumber: {} add: {}", number, matches);
+
+            holder.push(*number * matches);
 
             start_idx = None;
             end_idx = None;
