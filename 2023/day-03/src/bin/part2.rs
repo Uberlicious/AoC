@@ -4,46 +4,31 @@ fn main() {
     dbg!(output);
 }
 
-fn check_number(map: &Vec<Vec<char>>, lidx: usize, idx: usize) -> u64 {
-    let len = map[lidx].len();
+fn check_number(line: &Vec<char>, idx: usize) -> u64 {
     let mut l = idx.clone();
     let mut r = idx.clone();
 
-    let lmin = idx - 1;
-    let rmax = idx + 1;
-
     loop {
-        println!("l: {}", map[lidx][l]);
-        if l > 0 && (map[lidx][l - 1].is_ascii_digit() || l > lmin) {
+        // check left
+        if l > 0 && (line[l - 1].is_ascii_digit() || l < l - 1) {
             l -= 1;
-        } else {
-            break;
+            continue;
         }
-    }
 
-    loop {
-        println!("ridx: {} r: {}", r, map[lidx][r]);
-        if r < len - 1 && (map[lidx][r + 1].is_ascii_digit() || r < rmax) {
+        // check right
+        if r < line.len() - 1 && (line[r + 1].is_ascii_digit() || r > r + 1) {
             r += 1;
-        } else {
-            break;
+            continue;
         }
+
+        break;
     }
 
-    let s = &map[lidx][l..=r];
-
-    let numstr = map[lidx][l..=r]
+    line[l..=r]
         .iter()
-        .filter(|c| c.is_ascii_digit())
-        .collect::<String>();
-
-    println!("num: {}", numstr);
-
-    if numstr.len() > 0 {
-        return numstr.parse::<u64>().expect("num");
-    } else {
-        return 0;
-    }
+        .collect::<String>()
+        .parse::<u64>()
+        .expect("number")
 }
 
 fn check_surrounding(map: &Vec<Vec<char>>, line: usize, idx: usize) -> u64 {
@@ -51,7 +36,6 @@ fn check_surrounding(map: &Vec<Vec<char>>, line: usize, idx: usize) -> u64 {
     // .123.
     // .....
 
-    println!("surround - line {} idx: {}", line, idx);
     let mut holder: Vec<u64> = vec![];
     let mut l = idx.clone();
     let mut r = idx.clone();
@@ -66,25 +50,22 @@ fn check_surrounding(map: &Vec<Vec<char>>, line: usize, idx: usize) -> u64 {
 
     // check above
     if line > 0 {
-        for (idx, top) in map[line - 1].iter().enumerate().skip(l) {
-            println!("idx: {} top: {}", idx, top);
-            if idx > r {
-                break;
+        for (idx, top) in map[line - 1].iter().enumerate() {
+            if idx < l || idx > r {
+                continue;
             }
 
-            if top.is_ascii_digit() {
-                holder.push(check_number(map, line - 1, idx));
-                break;
+            if top.is_ascii_digit() && (map[line - 1][idx - 1] == '.' || idx == l) {
+                holder.push(check_number(&map[line - 1], idx));
             }
         }
-        println!();
     }
 
     // check left
     if idx > 0 {
         let left = map[line][l];
         if left.is_ascii_digit() {
-            holder.push(check_number(map, line, l));
+            holder.push(check_number(&map[line], l));
         }
     }
 
@@ -92,21 +73,19 @@ fn check_surrounding(map: &Vec<Vec<char>>, line: usize, idx: usize) -> u64 {
     if idx < map[line].len() {
         let right = map[line][r];
         if right.is_ascii_digit() {
-            holder.push(check_number(map, line, r));
+            holder.push(check_number(&map[line], r));
         }
     }
 
     // check below
     if line < map.len() - 1 {
-        for (idx, bottom) in map[line - 1].iter().enumerate().skip(l) {
-            println!("idx: {} bottom {}", idx, bottom);
-            if idx > r {
-                break;
+        for (idx, bottom) in map[line + 1].iter().enumerate() {
+            if idx < l || idx > r {
+                continue;
             }
 
-            if bottom.is_ascii_digit() {
-                holder.push(check_number(map, line + 1, idx));
-                break;
+            if bottom.is_ascii_digit() && (map[line + 1][idx - 1] == '.' || idx == l) {
+                holder.push(check_number(&map[line + 1], idx));
             }
         }
     }
@@ -130,14 +109,11 @@ fn process(input: &str) -> u64 {
         .collect::<Vec<Vec<char>>>();
 
     for (lidx, line) in lines.iter().enumerate() {
-        println!("lidx: {} line: {:?}", lidx, line);
-
         for (idx, c) in line.iter().enumerate() {
             if *c != '*' {
                 continue;
             }
 
-            println!("idx: {} c: {}", idx, c);
             holder.push(check_surrounding(&lines, lidx, idx));
         }
     }
