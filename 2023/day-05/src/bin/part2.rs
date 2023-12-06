@@ -1,6 +1,8 @@
 use rayon::prelude::*;
 use std::ops::Range;
 
+use indicatif::{ProgressBar, ProgressStyle};
+
 fn main() {
     let input = include_str!("./input1.txt");
     let output = process(input);
@@ -33,14 +35,16 @@ impl RangeMaps {
         }
     }
 
+    //     15
+    // 10......25
+
     fn get_map(&self, ranges: &Vec<(Range<u64>, Range<u64>)>, s: u64, m: &mut Vec<u64>) {
         for range in ranges {
-            if range.0.contains(&s) {
-                if let Some(idx) = range.0.clone().position(|n| n == s) {
-                    if let Some(soil) = range.1.clone().nth(idx) {
-                        m.push(soil);
-                        return;
-                    }
+            if s >= range.0.start && s <= range.0.end {
+                let idx = s - range.0.start;
+                if let Some(map) = range.1.clone().nth(idx as usize) {
+                    m.push(map);
+                    return;
                 }
             }
         }
@@ -49,35 +53,6 @@ impl RangeMaps {
     }
 
     fn closest(&self) -> u64 {
-        // for seed in &self.seeds {
-        //     for s in seed.clone() {
-        //         s.par_iter()
-        //             .map(|s| {
-        //                 let mut lowest = u64::MAX;
-
-        //                 let mut m = vec![];
-        //                 self.get_map(&self.seed_soil, s.clone(), &mut m);
-        //                 self.get_map(&self.soil_fertilizer, m[0].clone(), &mut m);
-        //                 self.get_map(&self.fertilizer_water, m[1].clone(), &mut m);
-        //                 self.get_map(&self.water_light, m[2].clone(), &mut m);
-        //                 self.get_map(&self.light_temperature, m[3].clone(), &mut m);
-        //                 self.get_map(&self.temperature_humidity, m[4].clone(), &mut m);
-        //                 self.get_map(&self.humidity_location, m[5].clone(), &mut m);
-
-        //                 if let Some(last) = m.last() {
-        //                     if *last < lowest {
-        //                         lowest = *last;
-        //                     }
-        //                 }
-
-        //                 return lowest;
-        //             })
-        //             .collect::<Vec<u64>>()
-        //             .iter()
-        //             .min()
-        //             .unwrap()
-        //     }
-        // }
         *self
             .seeds
             .par_iter()
