@@ -1,7 +1,5 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-
 fn main() {
     let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let input = include_str!("./input1.txt");
@@ -10,171 +8,215 @@ fn main() {
     println!("Time: {:?} Output {}", end - start, output);
 }
 
-#[derive(Debug)]
-enum Node {
-    True,
-    False,
-    Start,
-}
-
-enum Dir {
-    Above,
-    Below,
-    Left,
-    Right,
-}
-
-#[derive(Debug)]
-struct Tile {
-    char: char,
+fn check_above(
+    map: &Vec<Vec<char>>,
+    prev: (usize, usize),
     pos: (usize, usize),
-    next: Option<(usize, usize)>,
-    prev: Option<(usize, usize)>,
-}
+) -> Option<(usize, usize)> {
+    if pos.0 <= 0 {
+        return None;
+    }
 
-impl Tile {
-    fn new(char: char, pos: (usize, usize)) -> Tile {
-        Tile {
-            char,
-            pos,
-            next: None,
-            prev: None,
+    let valid_above = ['|', '7', 'F'];
+    let next = (pos.0 - 1, pos.1);
+
+    if valid_above.contains(&map[next.0][next.1]) {
+        if prev != next {
+            return Some(next);
         }
     }
-
-    fn set_next(&mut self, next: (usize, usize)) {
-        self.next = Some(next);
-    }
-
-    fn set_prev(&mut self, prev: (usize, usize)) {
-        self.prev = Some(prev);
-    }
-
-    fn next(&self) -> Option<(usize, usize)> {
-        self.next
-    }
+    return None;
 }
 
-struct PipeMap {
-    start: (u32, u32),
-}
+fn check_below(
+    map: &Vec<Vec<char>>,
+    prev: (usize, usize),
+    pos: (usize, usize),
+) -> Option<(usize, usize)> {
+    if pos.0 >= map.len() - 1 {
+        return None;
+    }
 
-fn check_surrounding(cur: &mut Vec<Vec<Tile>>, pos: (usize, usize)) -> bool {
-    let row = pos.0;
-    let col = pos.1;
-    let above = row > 0;
-    let below = row < map.len() - 1;
-    let left = col > 0;
-    let right = col < map[row].len() - 1;
-    let valid_above = ['|', '7', 'F'];
     let valid_below = ['|', 'L', 'J'];
+    let next = (pos.0 + 1, pos.1);
+
+    if valid_below.contains(&map[next.0][next.1]) {
+        if prev != next {
+            return Some(next);
+        }
+    }
+    return None;
+}
+
+fn check_left(
+    map: &Vec<Vec<char>>,
+    prev: (usize, usize),
+    pos: (usize, usize),
+) -> Option<(usize, usize)> {
+    if pos.1 <= 0 {
+        return None;
+    }
+
     let valid_left = ['-', 'L', 'F'];
+    let next = (pos.0, pos.1 - 1);
+
+    if valid_left.contains(&map[next.0][next.1]) {
+        if prev != next {
+            return Some(next);
+        }
+    }
+    return None;
+}
+
+fn check_right(
+    map: &Vec<Vec<char>>,
+    prev: (usize, usize),
+    pos: (usize, usize),
+) -> Option<(usize, usize)> {
+    if pos.1 >= map[pos.0].len() - 1 {
+        return None;
+    }
+
     let valid_right = ['-', 'J', '7'];
-    let c = map[row][col];
+    let next = (pos.0, pos.1 + 1);
+
+    if valid_right.contains(&map[next.0][next.1]) {
+        if prev != next {
+            return Some(next);
+        }
+    }
+    return None;
+}
+
+fn check_surrounding(
+    map: &Vec<Vec<char>>,
+    pos: (usize, usize),
+    prev: (usize, usize),
+) -> Option<(usize, usize)> {
+    let c = map[pos.0][pos.1];
 
     match c {
         '|' => {
-            if above && valid_above.contains(&map[row - 1][col]) {
-                if cur.prev.unwrap().0 != row - 1 && cur.prev.unwrap().1 != col {
-                    cur.set_next((row - 1, col));
-                    if 
-                }
+            if let Some(pos) = check_above(map, prev, pos) {
+                return Some(pos);
             }
 
-            if below && valid_above.contains(&map[row + 1][col]) {
-                return (Node::False, None);
+            if let Some(pos) = check_below(map, prev, pos) {
+                return Some(pos);
             }
-            return Node::True;
+            return None;
         }
         '-' => {
-            if right && !valid_right.contains(&map[row][col + 1]) {
-                return (Node::False, None);
+            if let Some(pos) = check_right(map, prev, pos) {
+                return Some(pos);
             }
 
-            if left && !valid_left.contains(&map[row][col - 1]) {
-                return (Node::False, None);
+            if let Some(pos) = check_left(map, prev, pos) {
+                return Some(pos);
             }
-            return Node::True;
+            return None;
         }
         'L' => {
-            if above && !valid_above.contains(&map[row - 1][col]) {
-                return (Node::False, None);
+            if let Some(pos) = check_above(map, prev, pos) {
+                return Some(pos);
             }
 
-            if right && !valid_right.contains(&map[row][col + 1]) {
-                return (Node::False, None);
+            if let Some(pos) = check_right(map, prev, pos) {
+                return Some(pos);
             }
-            return Node::True;
+            return None;
         }
         'J' => {
-            if above && !valid_above.contains(&map[row - 1][col]) {
-                return (Node::False, None);
+            if let Some(pos) = check_above(map, prev, pos) {
+                return Some(pos);
             }
 
-            if left && !valid_left.contains(&map[row][col - 1]) {
-                return (Node::False, None);
+            if let Some(pos) = check_left(map, prev, pos) {
+                return Some(pos);
             }
-            return Node::True;
+            return None;
         }
         '7' => {
-            if left && !valid_left.contains(&map[row][col - 1]) {
-                return (Node::False, None);
+            if let Some(pos) = check_left(map, prev, pos) {
+                return Some(pos);
             }
 
-            if below && !valid_above.contains(&map[row + 1][col]) {
-                return (Node::False, None);
+            if let Some(pos) = check_below(map, prev, pos) {
+                return Some(pos);
             }
-            return Node::True;
+            return None;
         }
         'F' => {
-            if right && !valid_right.contains(&map[row][col + 1]) {
-                return (Node::False, None);
+            if let Some(pos) = check_right(map, prev, pos) {
+                return Some(pos);
             }
 
-            if below && !valid_above.contains(&map[row + 1][col]) {
-                return (Node::False, None);
+            if let Some(pos) = check_below(map, prev, pos) {
+                return Some(pos);
             }
-            return Node::True;
+            return None;
         }
-        '.' => return (Node::False, None),
-        'S' => return Node::Start,
+        'S' => {
+            if let Some(pos) = check_above(map, prev, pos) {
+                return Some(pos);
+            }
+            if let Some(pos) = check_below(map, prev, pos) {
+                return Some(pos);
+            }
+            if let Some(pos) = check_left(map, prev, pos) {
+                return Some(pos);
+            }
+            if let Some(pos) = check_right(map, prev, pos) {
+                return Some(pos);
+            }
+        }
+        '.' => return None,
 
-        _ => return (Node::False, None),
+        _ => return None,
     };
+    return None;
 }
 
 fn process(input: &str) -> i64 {
     let input = input.replace("\r\n", "\n");
     let lines = &mut input.split("\n").collect::<Vec<_>>();
 
-    let map = lines
-        .iter()
-        .map(|l| l.chars().collect::<Vec<char>>())
-        .collect::<Vec<Vec<char>>>();
-
-    // let mut tile_map: Vec<Vec<Tile>> = Vec::with;
     let mut start = (0, 0);
 
-    let mut tile_map = map
+    let map = lines
         .iter()
         .enumerate()
-        .map(|(row_idx, row)| {
-            row.iter()
+        .map(|(row, l)| {
+            l.chars()
                 .enumerate()
-                .map(|(col_idx, col)| {
-                    if *col == 'S' {
-                        start = (row_idx, col_idx);
+                .map(|(col, char)| {
+                    if char == 'S' {
+                        start = (row, col);
                     }
-                    Tile::new(*col, (row_idx, col_idx))
+                    char
                 })
-                .collect::<Vec<Tile>>()
+                .collect::<Vec<char>>()
         })
-        .collect::<Vec<Vec<Tile>>>();
+        .collect::<Vec<Vec<char>>>();
 
-    println!("start: {:?}", start);
-    check_surrounding(&mut tile_map, start);
+    let mut first = check_surrounding(&map, start, (0, 0));
+    let mut prev_first = start;
+    let mut second = check_surrounding(&map, start, first.unwrap());
+    let mut prev_second = start;
+    let mut iters = 1;
 
-    0
+    while first != second {
+        iters += 1;
+        let first_new = check_surrounding(&map, first.unwrap(), prev_first);
+        prev_first = first.unwrap();
+        first = first_new;
+
+        let second_new = check_surrounding(&map, second.unwrap(), prev_second);
+        prev_second = second.unwrap();
+        second = second_new;
+    }
+
+    iters
 }
 
 #[cfg(test)]
@@ -190,6 +232,18 @@ mod tests {
 .L-J.
 .....",
         );
-        assert_eq!(result, 114);
+        assert_eq!(result, 4);
+    }
+
+    #[test]
+    fn test_part_2() {
+        let result = process(
+            "..F7.
+.FJ|.
+SJ.L7
+|F--J
+LJ...",
+        );
+        assert_eq!(result, 8);
     }
 }
