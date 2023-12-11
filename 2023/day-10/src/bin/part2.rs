@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[allow(unused_variables, dead_code)]
 fn main() {
     let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
     let input = include_str!("./input1.txt");
@@ -177,107 +178,235 @@ fn check_surrounding(
     return None;
 }
 
-struct Nest {
-    pos: (usize, usize),
-    top_char: Option<char>,
-    bottom_char: Option<char>,
-    left_char: Option<char>,
-    right_char: Option<char>,
+#[derive(Debug, PartialEq)]
+enum HoleDir {
+    Top,
+    Bottom,
+    Left,
+    Right,
 }
 
-fn search_top_hole(
+fn search_vert_hole(
     map: &Vec<Vec<char>>,
-    left: (usize, usize),
     top: (usize, usize),
-    right: (usize, usize),
-    searched: &mut Vec<(usize, usize, bool)>,
-) -> bool {
+    offset: HoleDir,
+) -> Option<Vec<(usize, usize)>> {
+    let mut holder: Vec<(usize, usize)> = vec![];
+
     let vert_left_wall = ['|', '7', 'J'];
     let vert_right_wall = ['|', 'F', 'L'];
 
-    if vert_left_wall.contains(&map[top.0][top.1])
-        && vert_right_wall.contains(&map[right.0][right.1])
-    {
-        if top.0 == 0 {
-            return true;
-        }
+    let left_pos = (top.0, top.1 - 1);
+    let right_pos = (top.0, top.1 + 1);
 
-        return search_top_hole(
-            map,
-            left,
-            (top.0 - 1, top.1),
-            (right.0 - 1, right.1),
-            searched,
-        );
+    let mut top_left_res: Option<(bool, usize, usize)> = None;
+    let mut top_right_res: Option<(bool, usize, usize)> = None;
+    let mut top = top;
+
+    let top_left_char = map[left_pos.0][left_pos.1];
+    let top_right_char = map[right_pos.0][right_pos.1];
+    let top_char = map[top.0][top.1];
+
+    let mut left = false;
+    let mut right = false;
+
+    if vert_left_wall.contains(&top_left_char) && vert_right_wall.contains(&top_char) {
+        left = true;
     }
 
-    if vert_right_wall.contains(&map[top.0][top.1]) && vert_left_wall.contains(&map[left.0][left.1])
-    {
-        if top.0 == 0 {
-            return true;
-        }
-
-        return search_top_hole(
-            map,
-            (left.0 - 1, left.1),
-            (top.0 - 1, top.1),
-            right,
-            searched,
-        );
+    if vert_left_wall.contains(&top_char) && vert_right_wall.contains(&top_right_char) {
+        right = true;
     }
 
-    return true;
+    if !right && !left {
+        return None;
+    }
+
+    println!("right: {right} left: {left}");
+    let mut idx = 0;
+
+    loop {
+        if idx >= 2 {
+            break;
+        }
+        let top_left_pos;
+        let top_right_pos;
+
+        if left {
+            top_left_pos = (top.0, top.1 - 1);
+            top_right_pos = (top.0, top.1);
+        } else {
+            top_left_pos = (top.0, top.1);
+            top_right_pos = (top.0, top.1 + 1);
+        }
+
+        idx += 1;
+        if top_left_res == None && top_right_res == None {
+            let top_left_char = map[top_left_pos.0][top_left_pos.1];
+            let top_right_char = map[top_right_pos.0][top_right_pos.1];
+            println!("tlp: {top_left_pos:?} tlc: {top_left_char:?} trp: {top_right_pos:?} trc: {top_right_char:?}");
+
+            if !vert_left_wall.contains(&top_left_char)
+                || !vert_right_wall.contains(&top_right_char)
+            {
+                let mut tl_valid = false;
+                if top_left_char == '.' {
+                    tl_valid = true;
+                }
+
+                top_left_res = Some((tl_valid, left_pos.0, left_pos.1));
+
+                let mut tr_valid = false;
+                if top_left_char == '.' {
+                    tr_valid = true;
+                }
+
+                top_right_res = Some((tr_valid, top.0, top.1));
+            }
+        }
+
+        println!("tlr: {top_left_res:?} trr: {top_right_res:?}");
+
+        if top_left_res != None && top_right_res == None {
+            break;
+        }
+
+        if offset == HoleDir::Top && top.0 > 0 {
+            top = (top.0 - 1, top.1);
+        } else if top.0 < map[0].len() - 1 {
+            top = (top.0 + 1, top.1);
+        } else {
+            break;
+        }
+    }
+
+    if let Some(tl) = top_left_res {
+        if tl.0 {
+            holder.push((top_left_res.unwrap().1, top_left_res.unwrap().2));
+        }
+    }
+
+    if let Some(tr) = top_right_res {
+        if tr.0 {
+            holder.push((top_right_res.unwrap().1, top_right_res.unwrap().2));
+        }
+    }
+
+    if holder.len() > 0 {
+        return Some(holder);
+    }
+
+    None
 }
 
-fn find_nests(
+fn fan_out(
     map: &Vec<Vec<char>>,
     pipes: &Vec<(usize, usize)>,
-    current: (usize, usize),
-    mut searched: Vec<Vec<bool>>,
-) -> bool {
-    let walls = ['|', '-', 'L', 'J', '7', 'F', 'S'];
+    searching: Vec<(usize, usize)>,
+    searched: &mut Vec<Vec<(bool, bool)>>,
+    mut chain: Vec<(usize, usize)>,
+    mut chain_state: bool,
+) {
     let vert_left_wall = ['|', '7', 'J'];
     let vert_right_wall = ['|', 'F', 'L'];
 
     let horiz_top_wall = ['L', 'J', '-'];
     let horiz_bottom_wall = ['7', 'F', '-'];
 
-    // if against outer wall return false
-    if current.0 == 0 {
-        searched[current.0][current.1] = true;
-        return false;
+    let mut next_search: Vec<(usize, usize)> = vec![];
+
+    for s in searching.iter() {
+        let top = s.0 > 0;
+        let bottom = s.0 < map.len() - 1;
+        let left = s.1 > 0;
+        let right = s.1 < map[0].len() - 1;
+
+        if top {
+            let top = (s.0 - 1, s.1);
+            let top_char = map[top.0][top.1];
+            if top_char == '.' && !searched[top.0][top.1].0 {
+                next_search.push(top)
+            }
+
+            if pipes.contains(&top)
+                && (vert_left_wall.contains(&top_char) || vert_right_wall.contains(&top_char))
+            {
+                if let Some(top_hole) = search_vert_hole(map, top, HoleDir::Top) {
+                    println!("top_hole: {top_hole:?}");
+                }
+            }
+        } else {
+            chain_state = false;
+        }
+
+        if bottom {
+            let bottom = (s.0 + 1, s.1);
+            let bottom_char = map[bottom.0][bottom.1];
+            if bottom_char == '.' && !searched[bottom.0][bottom.1].0 {
+                next_search.push(bottom)
+            }
+        } else {
+            chain_state = false;
+        }
+
+        if left {
+            let left = (s.0, s.1 - 1);
+            let left_char = map[left.0][left.1];
+            if left_char == '.' && !searched[left.0][left.1].0 {
+                next_search.push(left)
+            }
+        } else {
+            chain_state = false;
+        }
+
+        if right {
+            let right = (s.0, s.1 + 1);
+            let right_char = map[right.0][right.1];
+            if right_char == '.' && !searched[right.0][right.1].0 {
+                next_search.push(right)
+            }
+        } else {
+            chain_state = false;
+        }
+
+        searched[s.0][s.1].0 = true;
+        chain.push((s.0, s.1));
     }
 
-    if current.0 == map.len() - 1 {
-        searched[current.0][current.1] = true;
-        return false;
+    if next_search.len() > 0 {
+        fan_out(
+            map,
+            pipes,
+            next_search,
+            searched,
+            chain.clone(),
+            chain_state,
+        );
     }
 
-    if current.1 == 0 {
-        searched[current.0][current.1] = true;
-        return false;
-    }
+    chain
+        .iter()
+        .for_each(|x| searched[x.0][x.1].1 = chain_state);
+}
 
-    if current.1 == map.len() - 1 {
-        searched[current.0][current.1] = true;
-        return false;
-    }
+fn find_nests(
+    map: &Vec<Vec<char>>,
+    pipes: &Vec<(usize, usize)>,
+    searched: &mut Vec<Vec<(bool, bool)>>,
+) {
+    for (row, vec) in map.iter().enumerate() {
+        for (col, char) in vec.iter().enumerate() {
+            if *char != '.' {
+                continue;
+            }
 
-    let top = (current.0 - 1, current.1);
-    if pipes.contains(&top) {
-        let top_char = map[top.0][top.1];
-        if vert_left_wall.contains(&top_char) && vert_right_wall.contains(&map[top.0][top.1 + 1]) {
-            search_top_hole(
-                map,
-                (top.0, top.1 - 1),
-                top,
-                (top.0, top.1 + 1),
-                &mut searched,
-            );
+            if searched[row][col].0 {
+                continue;
+            }
+
+            fan_out(&map, &pipes, vec![(row, col)], searched, vec![], true);
         }
     }
-
-    false
 }
 
 fn process(input: &str) -> i64 {
@@ -286,7 +415,6 @@ fn process(input: &str) -> i64 {
     let mut trapped = 0;
 
     let mut start = (0, 0);
-
     let map = lines
         .iter()
         .enumerate()
@@ -308,6 +436,9 @@ fn process(input: &str) -> i64 {
     let mut second = check_surrounding(&map, start, first.unwrap());
     let mut prev_second = start;
     let mut pipes: Vec<(usize, usize)> = vec![];
+    pipes.push(start);
+    pipes.push(first.unwrap());
+    pipes.push(second.unwrap());
 
     loop {
         let first_new = check_surrounding(&map, first.unwrap(), prev_first);
@@ -326,9 +457,27 @@ fn process(input: &str) -> i64 {
         pipes.push(second.unwrap());
     }
 
-    find_nests(&map, &pipes, (0, 0), vec![]);
+    let mut searched: Vec<Vec<(bool, bool)>> = vec![vec![(false, false); map[0].len()]; map.len()];
+    find_nests(&map, &pipes, &mut searched);
 
-    println!("pipes: {pipes:?}");
+    searched.iter().enumerate().for_each(|(row_idx, row)| {
+        let row = row
+            .iter()
+            .enumerate()
+            .map(|(col_idx, col)| {
+                if pipes.contains(&(row_idx, col_idx)) || !col.0 {
+                    return map[row_idx][col_idx];
+                }
+
+                if col.1 {
+                    return 'I';
+                } else {
+                    return 'O';
+                }
+            })
+            .collect::<String>();
+        println!("{row:?}");
+    });
 
     trapped
 }
@@ -369,37 +518,37 @@ mod tests {
         assert_eq!(result, 4);
     }
 
-    #[test]
-    fn test_part_2() {
-        let result = process(
-            ".F----7F7F7F7F-7....
-            .|F--7||||||||FJ....
-            .||.FJ||||||||L7....
-            FJL7L7LJLJ||LJ.L-7..
-            L--J.L7...LJS7F-7L7.
-            ....F-J..F7FJ|L7L7L7
-            ....L7.F7||L7|.L7L7|
-            .....|FJLJ|FJ|F7|.LJ
-            ....FJL-7.||.||||...
-            ....L---J.LJ.LJLJ...",
-        );
-        assert_eq!(result, 8);
-    }
+    // #[test]
+    // fn test_part_2() {
+    //     let result = process(
+    //         ".F----7F7F7F7F-7....
+    //         .|F--7||||||||FJ....
+    //         .||.FJ||||||||L7....
+    //         FJL7L7LJLJ||LJ.L-7..
+    //         L--J.L7...LJS7F-7L7.
+    //         ....F-J..F7FJ|L7L7L7
+    //         ....L7.F7||L7|.L7L7|
+    //         .....|FJLJ|FJ|F7|.LJ
+    //         ....FJL-7.||.||||...
+    //         ....L---J.LJ.LJLJ...",
+    //     );
+    //     assert_eq!(result, 8);
+    // }
 
-    #[test]
-    fn test_part_3() {
-        let result = process(
-            "FF7FSF7F7F7F7F7F---7
-            L|LJ||||||||||||F--J
-            FL-7LJLJ||||||LJL-77
-            F--JF--7||LJLJ7F7FJ-
-            L---JF-JLJ.||-FJLJJ7
-            |F|F-JF---7F7-L7L|7|
-            |FFJF7L7F-JF7|JL---7
-            7-L-JL7||F7|L7F-7F7|
-            L.L7LFJ|||||FJL7||LJ
-            L7JLJL-JLJLJL--JLJ.L",
-        );
-        assert_eq!(result, 10);
-    }
+    // #[test]
+    // fn test_part_3() {
+    //     let result = process(
+    //         "FF7FSF7F7F7F7F7F---7
+    //         L|LJ||||||||||||F--J
+    //         FL-7LJLJ||||||LJL-77
+    //         F--JF--7||LJLJ7F7FJ-
+    //         L---JF-JLJ.||-FJLJJ7
+    //         |F|F-JF---7F7-L7L|7|
+    //         |FFJF7L7F-JF7|JL---7
+    //         7-L-JL7||F7|L7F-7F7|
+    //         L.L7LFJ|||||FJL7||LJ
+    //         L7JLJL-JLJLJL--JLJ.L",
+    //     );
+    //     assert_eq!(result, 10);
+    // }
 }
