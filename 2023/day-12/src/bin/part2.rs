@@ -1,132 +1,132 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::io::Read;
 
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-
-fn main() {
-    let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let input = include_str!("./input1.txt");
-    let output = process(input);
-    let end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    println!("Time: {:?} Output {}", end - start, output);
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum Spring {
+    Broken,
+    Working,
+    Unknown,
 }
 
-fn check_match(order: &Vec<usize>, parts: &Vec<char>) -> bool {
-    let str = parts.iter().collect::<String>();
+fn arrangements(input: &str, repetitions: usize) -> u64 {
+    let mut springs_single_rep = Vec::new();
+    let mut springs = Vec::<Spring>::new();
+    let mut groups_single_rep = Vec::new();
+    let mut groups = Vec::<usize>::new();
+    let mut stack = Vec::new();
+    let mut cache = Vec::new();
 
-    let counts = str
-        .split(".")
-        .filter_map(|s| {
-            // if s.is_empty() {
-            //     return None;
-            // }
-            if s.contains('#') {
-                return Some(s.chars().count());
-            }
-            None
-        })
-        .collect::<Vec<usize>>();
+    input
+        .lines()
+        .map(|line| {
+            springs_single_rep.clear();
+            springs.clear();
+            groups_single_rep.clear();
+            groups.clear();
+            stack.clear();
+            cache.clear();
 
-    *order == counts
-}
+            let mut parts = line.split_ascii_whitespace();
 
-fn recurse(
-    order: &Vec<usize>,
-    parts: &Vec<char>,
-    mut idx: usize,
-    matches: &mut Vec<Vec<char>>,
-) -> Option<bool> {
-    let mut new_parts = parts.clone();
-    let total_parts: usize = order.iter().sum();
+            springs_single_rep.extend(parts.next().unwrap().chars().map(|c| match c {
+                '#' => Spring::Broken,
+                '.' => Spring::Working,
+                '?' => Spring::Unknown,
+                _ => panic!(),
+            }));
 
-    // let b_match = check_match(order, parts);
-    // println!("matches: {b_match} parts: {new_parts:?}");
+            groups_single_rep.extend(
+                parts
+                    .next()
+                    .unwrap()
+                    .split(',')
+                    .map(|num| num.parse::<usize>().unwrap()),
+            );
 
-    if !parts.contains(&'?') && !matches.contains(&parts) && check_match(order, parts) {
-        matches.push(parts.clone());
-    }
-
-    let chars = vec!['.', '#'];
-
-    for i in idx..parts.len() {
-        if parts[i] == '?' {
-            chars.iter().for_each(|c| {
-                new_parts[idx] = *c;
-                let new_total: i32 = new_parts
-                    .iter()
-                    .map(|c| {
-                        if *c == '#' {
-                            return 1;
-                        }
-                        0
-                    })
-                    .sum();
-                if new_total <= total_parts as i32 {
-                    recurse(order, &new_parts, idx, matches);
+            springs.reserve((springs_single_rep.len() + 1 * repetitions) - 1);
+            groups.reserve(groups_single_rep.len() * repetitions);
+            for _ in 0..repetitions {
+                if springs.len() > 0 {
+                    springs.push(Spring::Unknown);
                 }
-            })
-        }
-        idx += 1;
-    }
+                springs.extend(&springs_single_rep);
+                groups.extend(&groups_single_rep);
+            }
 
-    None
-}
+            cache.resize((groups.len() - 1) * springs.len(), None);
+            stack.reserve(groups.len() - 1);
 
-fn check(order: &Vec<usize>, parts: &Vec<char>) -> i64 {
-    let mut matches = vec![];
+            let mut count = 0;
+            let mut pos = 0;
 
-    recurse(order, parts, 0, &mut matches);
-    // println!("matches: {}", matches.len());
-    matches.len() as i64
-}
+            loop {
+                let mut indent = String::new();
+                for _ in 0..stack.len() {
+                    indent.extend("  ".chars());
+                }
+                let len = groups[stack.len()];
+                let end = pos + len;
 
-fn process(input: &str) -> i64 {
-    let input = input.replace("\r\n", "\n");
-    let lines = &mut input.split("\n").collect::<Vec<_>>();
+                if end > springs.len() || (pos > 0 && springs[pos - 1] == Spring::Broken) {
+                    // There's a broken spring that's not included in a group, or we've gone past the end
+                    if let Some((x, y)) = stack.pop() {
+                        pos = x;
+                        cache[stack.len() * springs.len() + pos] = Some(count);
+                        count = y + count;
+                        pos += 1;
+                        continue;
+                    } else {
+                        break;
+                    }
+                }
 
-    lines
-        .par_iter()
-        .map(|l| {
-            let split = l.split_ascii_whitespace().collect::<Vec<&str>>();
-            let parts = split[0].chars().collect::<Vec<char>>();
-            let mut parts_unfolded = vec![];
-            for i in 0..parts.len() * 5 {
-                parts_unfolded.push(parts[i % parts.len()]);
-                if i != 0 && i % parts.len() == 0 {
-                    parts_unfolded.push('?');
+                if (end < springs.len() && springs[end] == Spring::Broken)
+                    || springs[pos..end].iter().any(|&x| x == Spring::Working)
+                {
+                    // Not a valid position
+                    pos += 1;
+                    continue;
+                }
+
+                if stack.len() == groups.len() - 1 {
+                    if springs[end..].iter().all(|&x| x != Spring::Broken) {
+                        count += 1;
+                    }
+                    pos += 1;
+                } else {
+                    if let Some(old) = cache[stack.len() * springs.len() + pos] {
+                        count += old;
+                        pos += 1;
+                    } else {
+                        stack.push((pos, count));
+                        count = 0;
+                        pos = end + 1;
+                    }
                 }
             }
 
-            let order = split[1]
-                .split(',')
-                .filter_map(|x| x.parse::<usize>().ok())
-                .collect::<Vec<usize>>();
-            let mut order_unfolded = vec![];
-            for i in 0..order.len() * 5 {
-                order_unfolded.push(order[i % order.len()])
-            }
-
-            // println!("order: {order_unfolded:?}, parts: {parts_unfolded:?}");
-            check(&order_unfolded, &parts_unfolded)
+            count
         })
-        .collect::<Vec<i64>>()
-        .iter()
         .sum()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn part_1(input: &str) -> u64 {
+    arrangements(input, 1)
+}
 
-    #[test]
-    fn test_part_1() {
-        let result = process(
-            "???.### 1,1,3
-            .??..??...?##. 1,1,3
-            ?#?#?#?#?#?#?#? 1,3,1,6
-            ????.#...#... 4,1,1
-            ????.######..#####. 1,6,5
-            ?###???????? 3,2,1",
-        );
-        assert_eq!(result, 525152);
-    }
+fn part_2(input: &str) -> u64 {
+    arrangements(input, 5)
+}
+
+fn main() {
+    let input = include_str!("./input1.txt");
+
+    let start_time = std::time::Instant::now();
+    let result = part_1(&input);
+    println!("Part 1 time: {:?}", std::time::Instant::now() - start_time);
+    println!("Part 1 result: {}", result);
+
+    let start_time = std::time::Instant::now();
+    let result = part_2(&input);
+    println!("Part 2 time: {:?}", std::time::Instant::now() - start_time);
+    println!("Part 2 result: {}", result);
 }
