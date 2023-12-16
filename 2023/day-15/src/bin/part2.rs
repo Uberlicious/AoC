@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::{hash_map::Entry::*, HashMap},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 fn main() {
     let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
@@ -8,12 +11,12 @@ fn main() {
     println!("Time: {:?} Output {}", end - start, output);
 }
 
-fn hash(s: &[u8]) -> u32 {
+fn hash(s: &[u8]) -> u8 {
     let mut current = 0;
     s.iter().for_each(|&b| {
         current = ((current + b as u32) * 17) % 256;
     });
-    current
+    current as u8
 }
 
 fn process(input: &str) -> usize {
@@ -22,17 +25,45 @@ fn process(input: &str) -> usize {
         .map(|s| s.as_bytes())
         .collect::<Vec<&[u8]>>();
 
-    input
-        .iter()
-        .map(|&b| {
-            if b.contains(&b'-') {
-                println!("{:?} minus", std::str::from_utf8(b));
-            }
+    let mut boxes: Vec<Vec<(&[u8], u8)>> = vec![vec![]; 256];
 
-            println!("{:?} equals", std::str::from_utf8(b));
-            hash(b)
+    input.iter().for_each(|&b| {
+        if b.contains(&b'=') {
+            let label = &b[0..&b.len() - 2];
+            let hash = hash(label);
+            let lens = std::str::from_utf8(&b[b.len() - 1..])
+                .expect("utf8")
+                .parse::<u8>()
+                .expect("not a number");
+
+            match boxes[hash as usize].iter_mut().find(|x| x.0 == label) {
+                Some(b) => {
+                    b.1 = lens;
+                }
+                None => boxes[hash as usize].push((label, lens)),
+            }
+        } else {
+            let label = &b[0..&b.len() - 1];
+            let hash = hash(label);
+            match boxes[hash as usize].iter().position(|x| x.0 == label) {
+                Some(i) => {
+                    boxes[hash as usize].remove(i);
+                }
+                None => {}
+            }
+        }
+    });
+
+    boxes
+        .iter()
+        .enumerate()
+        .map(|b| {
+            b.1.iter()
+                .enumerate()
+                .map(|l| (b.0 + 1) * (l.0 + 1) * l.1 .1 as usize)
+                .sum::<usize>()
         })
-        .sum::<u32>() as usize
+        .sum::<usize>()
 }
 
 #[cfg(test)]
@@ -40,14 +71,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_part_1() {
-        let result = process("HASH");
-        assert_eq!(result, 52)
-    }
-
-    #[test]
-    fn test_part_1_2() {
+    fn test_part_2() {
         let result = process("rn=1,cm-,qp=3,cm=2,qp-,pc=4,ot=9,ab=5,pc-,pc=6,ot=7");
-        assert_eq!(result, 1320);
+        assert_eq!(result, 145);
     }
 }
