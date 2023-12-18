@@ -1,78 +1,185 @@
 use std::{
-    collections::{hash_map::Entry::*, HashMap},
-    time::{SystemTime, UNIX_EPOCH},
+    collections::{HashSet, VecDeque},
+    ops::Add,
 };
 
-fn main() {
-    let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let input = include_str!("./input1.txt");
-    let output = process(input);
-    let end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    println!("Time: {:?} Output {}", end - start, output);
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum Direction {
+    Up,
+    Down,
+    Left,
+    Right,
 }
 
-fn hash(s: &[u8]) -> u8 {
-    let mut current = 0;
-    s.iter().for_each(|&b| {
-        current = ((current + b as u32) * 17) % 256;
-    });
-    current as u8
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
+struct Point {
+    x: i32,
+    y: i32,
 }
 
-fn process(input: &str) -> usize {
-    let input = input
-        .split(',')
-        .map(|s| s.as_bytes())
-        .collect::<Vec<&[u8]>>();
+impl Point {
+    fn new(x: i32, y: i32) -> Self {
+        Point { x, y }
+    }
+}
 
-    let mut boxes: Vec<Vec<(&[u8], u8)>> = vec![vec![]; 256];
+impl Add for Point {
+    type Output = Self;
 
-    input.iter().for_each(|&b| {
-        if b.contains(&b'=') {
-            let label = &b[0..&b.len() - 2];
-            let hash = hash(label);
-            let lens = std::str::from_utf8(&b[b.len() - 1..])
-                .expect("utf8")
-                .parse::<u8>()
-                .expect("not a number");
+    fn add(self, other: Self) -> Self {
+        Point::new(self.x + other.x, self.y + other.y)
+    }
+}
 
-            match boxes[hash as usize].iter_mut().find(|x| x.0 == label) {
-                Some(b) => {
-                    b.1 = lens;
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct Beam {
+    position: Point,
+    direction: Direction,
+}
+
+impl Beam {
+    fn new(position: Point, direction: Direction) -> Self {
+        Beam {
+            position,
+            direction,
+        }
+    }
+
+    fn out_of_bounds(&self, grid: &Vec<Vec<char>>) -> bool {
+        self.position.x < 0
+            || self.position.y < 0
+            || self.position.x >= grid[0].len() as i32
+            || self.position.y >= grid.len() as i32
+    }
+
+    fn move_forward(&mut self) {
+        match self.direction {
+            Direction::Up => self.position.y -= 1,
+            Direction::Down => self.position.y += 1,
+            Direction::Left => self.position.x -= 1,
+            Direction::Right => self.position.x += 1,
+        }
+    }
+}
+
+struct Grid {
+    grid: Vec<Vec<char>>,
+}
+
+impl Grid {
+    fn parse(input: &str) -> Self {
+        let grid = input
+            .lines()
+            .map(|line| line.chars().collect::<Vec<_>>())
+            .collect::<Vec<_>>();
+        Grid { grid }
+    }
+
+    fn calculate_energized(&self, initial_beam: Beam) -> usize {
+        // Track the number of points on the grid we've touched.
+        let mut energized = HashSet::new();
+
+        // When we split, we need to keep track of beams we haven't
+        // processed yet.
+        let mut beams = VecDeque::new();
+        beams.push_back(initial_beam);
+
+        // Beams can cycle, so we need to track previous beams. This
+        // differes
+        let mut seen = HashSet::new();
+
+        while let Some(mut beam) = beams.pop_front() {
+            while !beam.out_of_bounds(&self.grid) && !seen.contains(&beam) {
+                // Energize our position.
+                energized.insert(beam.position.clone());
+                seen.insert(beam.clone());
+
+                // Determine how to move based on the current position.
+                match (
+                    self.grid[beam.position.y as usize][beam.position.x as usize],
+                    &beam.direction,
+                ) {
+                    // If we hit a | going right or left, we want to make
+                    // a copy going up and the move down.
+                    ('|', Direction::Right | Direction::Left) => {
+                        // Create a copy going up.
+                        let mut up = beam.clone();
+                        up.direction = Direction::Up;
+                        up.move_forward();
+                        beams.push_back(up);
+
+                        beam.direction = Direction::Down;
+                    }
+                    // If we hit a - going up or down, we want to make
+                    // a copy going left and the move right.
+                    ('-', Direction::Up | Direction::Down) => {
+                        // Create a copy going left.
+                        let mut left = beam.clone();
+                        left.direction = Direction::Left;
+                        left.move_forward();
+                        beams.push_back(left);
+
+                        beam.direction = Direction::Right;
+                    }
+                    // The rest of the cases are just changing direction.
+                    ('/', Direction::Up) => beam.direction = Direction::Right,
+                    ('/', Direction::Down) => beam.direction = Direction::Left,
+                    ('/', Direction::Left) => beam.direction = Direction::Down,
+                    ('/', Direction::Right) => beam.direction = Direction::Up,
+                    ('\\', Direction::Up) => beam.direction = Direction::Left,
+                    ('\\', Direction::Down) => beam.direction = Direction::Right,
+                    ('\\', Direction::Left) => beam.direction = Direction::Up,
+                    ('\\', Direction::Right) => beam.direction = Direction::Down,
+
+                    // Anything else is just moving forward.
+                    _ => {}
                 }
-                None => boxes[hash as usize].push((label, lens)),
-            }
-        } else {
-            let label = &b[0..&b.len() - 1];
-            let hash = hash(label);
-            match boxes[hash as usize].iter().position(|x| x.0 == label) {
-                Some(i) => {
-                    boxes[hash as usize].remove(i);
-                }
-                None => {}
+                // All of the above will cause the beam to move
+                // forward in it's (new) direction.
+                beam.move_forward();
             }
         }
-    });
-
-    boxes
-        .iter()
-        .enumerate()
-        .map(|b| {
-            b.1.iter()
-                .enumerate()
-                .map(|l| (b.0 + 1) * (l.0 + 1) * l.1 .1 as usize)
-                .sum::<usize>()
-        })
-        .sum::<usize>()
+        energized.len()
+    }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+fn main() {
+    let input = include_str!("./input1.txt");
+    let grid = Grid::parse(&input);
 
-    #[test]
-    fn test_part_2() {
-        let result = process("rn=1,cm-,qp=3,cm=2,qp-,pc=4,ot=9,ab=5,pc-,pc=6,ot=7");
-        assert_eq!(result, 145);
+    // For part one, we want to find the max energized if we start on
+    // the top left.
+    let now = std::time::Instant::now();
+    let initial_beam = Beam::new(Point::new(0, 0), Direction::Right);
+    println!(
+        "p1: {} ({:?})",
+        grid.calculate_energized(initial_beam),
+        now.elapsed()
+    );
+
+    // For part two, we want to find the max energized if we start on
+    // all of the edges.
+    let now = std::time::Instant::now();
+    let mut max_energized = 0;
+    // Do the top and bottom edges.
+    for x in 0..grid.grid[0].len() {
+        let beam = Beam::new(Point::new(x as i32, 0), Direction::Down);
+        max_energized = max_energized.max(grid.calculate_energized(beam));
+        let beam = Beam::new(
+            Point::new(x as i32, grid.grid.len() as i32 - 1),
+            Direction::Up,
+        );
+        max_energized = max_energized.max(grid.calculate_energized(beam));
     }
+    // Do the left and right edges.
+    for y in 0..grid.grid.len() {
+        let beam = Beam::new(Point::new(0, y as i32), Direction::Right);
+        max_energized = max_energized.max(grid.calculate_energized(beam));
+        let beam = Beam::new(
+            Point::new(grid.grid[0].len() as i32 - 1, y as i32),
+            Direction::Left,
+        );
+        max_energized = max_energized.max(grid.calculate_energized(beam));
+    }
+    println!("p2: {} ({:?})", max_energized, now.elapsed());
 }

@@ -1,4 +1,8 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::HashMap,
+    collections::{hash_map::Entry::*, HashSet},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 fn main() {
     let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
@@ -8,7 +12,7 @@ fn main() {
     println!("Time: {:?} Output {}", end - start, output);
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Dir {
     Up,
     Down,
@@ -16,52 +20,79 @@ enum Dir {
     Right,
 }
 
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+struct Beam {
+    row: usize,
+    col: usize,
+    dir: Dir,
+}
+
 fn trace_path(map: &Vec<&[u8]>, visited: &mut Vec<i32>) {
-    let mut beams = vec![
-        (0, 0, Dir::Right),
-        // (0, 0, Dir::Down),
-        // (0, 9, Dir::Up),
-        // (9, 0, Dir::Left),
-    ];
+    let mut beams = vec![Beam {
+        row: 0,
+        col: 0,
+        dir: Dir::Right,
+    }];
+
+    let mut beams_checked: HashSet<Beam> = HashSet::new();
 
     while beams.len() > 0 {
         let mut remove = vec![];
 
         for b in 0..beams.len() {
-            let x = beams[b].0;
-            let y = beams[b].1;
-            let dir = &beams[b].2;
+            if b != 0 {
+                continue;
+            }
+            let row = beams[b].row;
+            let col = beams[b].col;
+            let dir = &beams[b].dir;
 
             if *dir == Dir::Right {
-                for i in map[y].iter().enumerate().skip(x) {
-                    println!("Right: ({},{}): {}", i.0, y, *i.1 as char);
-                    visited[i.0] += 1;
+                for i in map[row].iter().enumerate().skip(col) {
+                    let col = i.0;
+                    visited[(row * map[row].len()) + col] += 1;
                     match i.1 {
                         b'|' => {
-                            if y > 0 {
-                                beams[b] = (i.0, y - 1, Dir::Up);
+                            if row > 0 {
+                                beams[b] = Beam {
+                                    row: row - 1,
+                                    col,
+                                    dir: Dir::Up,
+                                };
                             } else {
                                 remove.push(b);
                             }
 
-                            if y < map.len() - 1 {
-                                beams.push((i.0, y + 1, Dir::Down))
+                            if row < map.len() - 1 {
+                                beams.push(Beam {
+                                    row: row + 1,
+                                    col,
+                                    dir: Dir::Down,
+                                })
                             } else {
                                 remove.push(b);
                             }
                             break;
                         }
                         b'\\' => {
-                            if y < map.len() - 1 {
-                                beams[b] = (i.0, y + 1, Dir::Down);
+                            if row < map.len() - 1 {
+                                beams[b] = Beam {
+                                    row: row + 1,
+                                    col,
+                                    dir: Dir::Down,
+                                };
                             } else {
                                 remove.push(b);
                             }
                             break;
                         }
                         b'/' => {
-                            if y < map.len() - 1 {
-                                beams[b] = (i.0, y - 1, Dir::Up);
+                            if row > 0 {
+                                beams[b] = Beam {
+                                    row: row - 1,
+                                    col,
+                                    dir: Dir::Up,
+                                };
                             } else {
                                 remove.push(b);
                             }
@@ -69,40 +100,57 @@ fn trace_path(map: &Vec<&[u8]>, visited: &mut Vec<i32>) {
                         }
                         _ => {}
                     }
-                    if i.0 == map[y].len() - 1 {
-                        remove.push(b)
+                    if col == map[row].len() - 1 {
+                        remove.push(b);
+                        break;
                     }
                 }
             } else if *dir == Dir::Left {
-                for i in map[y].iter().enumerate().skip(map[x].len() - x).rev() {
-                    println!("Left: ({},{}): {}", i.0, y, *i.1 as char);
-                    visited[i.0] += 1;
-                    match i.1 {
+                for i in (0..=col).rev() {
+                    let col = i;
+                    visited[(row * map[row].len()) + col] += 1;
+                    match map[row][col] {
                         b'|' => {
-                            if y > 0 {
-                                beams[b] = (i.0, y - 1, Dir::Up);
+                            if row > 0 {
+                                beams[b] = Beam {
+                                    row: row - 1,
+                                    col,
+                                    dir: Dir::Up,
+                                };
                             } else {
                                 remove.push(b);
                             }
 
-                            if y < map.len() - 1 {
-                                beams.push((i.0, y + 1, Dir::Down))
+                            if row < map.len() - 1 {
+                                beams.push(Beam {
+                                    row: row + 1,
+                                    col,
+                                    dir: Dir::Down,
+                                })
                             } else {
                                 remove.push(b);
                             }
                             break;
                         }
                         b'\\' => {
-                            if y < map.len() - 1 {
-                                beams[b] = (i.0, y + 1, Dir::Down);
+                            if row > 0 {
+                                beams[b] = Beam {
+                                    row: row - 1,
+                                    col,
+                                    dir: Dir::Up,
+                                };
                             } else {
                                 remove.push(b);
                             }
                             break;
                         }
                         b'/' => {
-                            if y < map.len() - 1 {
-                                beams[b] = (i.0, y - 1, Dir::Up);
+                            if row < map.len() - 1 {
+                                beams[b] = Beam {
+                                    row: row + 1,
+                                    col,
+                                    dir: Dir::Down,
+                                };
                             } else {
                                 remove.push(b);
                             }
@@ -110,40 +158,56 @@ fn trace_path(map: &Vec<&[u8]>, visited: &mut Vec<i32>) {
                         }
                         _ => {}
                     }
-                    if i.0 == 0 {
-                        remove.push(b)
+                    if col == 0 {
+                        remove.push(b);
+                        break;
                     }
                 }
             } else if *dir == Dir::Down {
-                for i in y..map.len() {
-                    println!("Down: ({},{}): {}", x, i, map[i][x] as char);
-                    visited[i * map[x].len()] += 1;
-                    match map[i][x] {
+                for row in row..map.len() {
+                    visited[(row * map[row].len()) + col] += 1;
+                    match map[row][col] {
                         b'-' => {
-                            if x > 0 {
-                                beams[b] = (x - 1, i, Dir::Left);
+                            if col > 0 {
+                                beams[b] = Beam {
+                                    row,
+                                    col: col - 1,
+                                    dir: Dir::Left,
+                                };
                             } else {
                                 remove.push(b);
                             }
 
-                            if x < map[x].len() - 1 {
-                                beams.push((x + 1, i, Dir::Right))
+                            if col < map[row].len() - 1 {
+                                beams.push(Beam {
+                                    row,
+                                    col: col + 1,
+                                    dir: Dir::Right,
+                                })
                             } else {
                                 remove.push(b);
                             }
                             break;
                         }
                         b'\\' => {
-                            if x < map[x].len() - 1 {
-                                beams[b] = (x + 1, i, Dir::Right);
+                            if col < map[row].len() - 1 {
+                                beams[b] = Beam {
+                                    row,
+                                    col: col + 1,
+                                    dir: Dir::Right,
+                                };
                             } else {
                                 remove.push(b);
                             }
                             break;
                         }
                         b'/' => {
-                            if x > 0 {
-                                beams[b] = (x - 1, i, Dir::Left);
+                            if col > 0 {
+                                beams[b] = Beam {
+                                    row,
+                                    col: col - 1,
+                                    dir: Dir::Left,
+                                };
                             } else {
                                 remove.push(b);
                             }
@@ -151,41 +215,56 @@ fn trace_path(map: &Vec<&[u8]>, visited: &mut Vec<i32>) {
                         }
                         _ => {}
                     }
-                    if i == map.len() - 1 {
+                    if row == map.len() - 1 {
                         remove.push(b);
+                        break;
                     }
-                    break;
                 }
             } else if *dir == Dir::Up {
-                for i in (0..=y).rev() {
-                    println!("Up: ({},{}): {}", i, x, map[i][x] as char);
-                    visited[i * map[x].len()] += 1;
-                    match map[i][x] {
+                for row in (0..=row).rev() {
+                    visited[(row * map[row].len()) + col] += 1;
+                    match map[row][col] {
                         b'-' => {
-                            if x > 0 {
-                                beams[b] = (x - 1, i, Dir::Left);
+                            if col > 0 {
+                                beams[b] = Beam {
+                                    row,
+                                    col: col - 1,
+                                    dir: Dir::Left,
+                                };
                             } else {
                                 remove.push(b);
                             }
 
-                            if x < map[x].len() - 1 {
-                                beams.push((x + 1, i, Dir::Right))
+                            if col < map[col].len() - 1 {
+                                beams.push(Beam {
+                                    row,
+                                    col: col + 1,
+                                    dir: Dir::Right,
+                                })
                             } else {
                                 remove.push(b);
                             }
                             break;
                         }
                         b'\\' => {
-                            if x > 0 {
-                                beams[b] = (x - 1, i, Dir::Left);
+                            if col > 0 {
+                                beams[b] = Beam {
+                                    row,
+                                    col: col - 1,
+                                    dir: Dir::Left,
+                                };
                             } else {
                                 remove.push(b);
                             }
                             break;
                         }
                         b'/' => {
-                            if x < map[x].len() - 1 {
-                                beams[b] = (x + 1, i, Dir::Right);
+                            if col < map[row].len() - 1 {
+                                beams[b] = Beam {
+                                    row,
+                                    col: col + 1,
+                                    dir: Dir::Right,
+                                };
                             } else {
                                 remove.push(b);
                             }
@@ -193,10 +272,18 @@ fn trace_path(map: &Vec<&[u8]>, visited: &mut Vec<i32>) {
                         }
                         _ => {}
                     }
-                    if i == 0 {
-                        remove.push(b)
+                    if row == 0 {
+                        remove.push(b);
+                        break;
                     }
                 }
+            }
+
+            if beams_checked.contains(&beams[b]) {
+                remove.push(b);
+                remove.dedup();
+            } else {
+                beams_checked.insert(beams[b].clone());
             }
         }
         remove.sort();
@@ -204,11 +291,9 @@ fn trace_path(map: &Vec<&[u8]>, visited: &mut Vec<i32>) {
             beams.remove(r);
         }
     }
-
-    println!("beams: {beams:?} visited: {visited:?} ");
 }
 
-fn process(input: &str) -> usize {
+fn process(input: &str) -> i32 {
     let lines = input.lines();
 
     let map = lines.map(|l| l.trim().as_bytes()).collect::<Vec<_>>();
@@ -217,7 +302,15 @@ fn process(input: &str) -> usize {
 
     trace_path(&map, &mut visited);
 
-    0
+    visited
+        .into_iter()
+        .map(|n| {
+            if n > 0 {
+                return 1;
+            }
+            0
+        })
+        .sum()
 }
 
 #[cfg(test)]
