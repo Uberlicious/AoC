@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 ansi-hex-color = "0.1.1"
+image = "0.23.12"
 anyhow = "1.0.75"
 glam = "0.24.2"
 indicatif = "0.17.7"
