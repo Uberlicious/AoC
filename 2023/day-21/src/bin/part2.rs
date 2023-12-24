@@ -7,97 +7,187 @@ fn main() {
     let input = include_str!("./input1.txt");
 
     let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    let output = solve(input);
+    let output = part1_solve(input);
     let end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-    println!("Time: {:?} Output {:?}", end - start, output);
+    println!("Part 1 - Time: {:?} Output {:?}", end - start, output);
+
+    let start = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    let output = part2(input);
+    let end = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+    println!("Part 2 - Time: {:?} Output {:?}", end - start, output);
 }
 
-fn count_positions(map: &Vec<Vec<char>>, start: (usize, usize), steps: usize) -> usize {
-    let mut positions: HashSet<(usize, usize)> = HashSet::new();
-    positions.insert(start);
+pub struct Grid {
+    data: Box<[u8]>,
+    offset: usize,
+}
+impl Grid {
+    fn from_str(s: &str) -> Self {
+        let mut lines = s.lines().peekable();
+        let line_len = lines.peek().map_or(0, |l| l.len());
+        Self {
+            data: lines.flat_map(str::as_bytes).copied().collect::<Box<_>>(),
+            offset: line_len,
+        }
+    }
+    const fn next_pos(&self, p: usize, dir: u8) -> Option<usize> {
+        // 0 = up, 1 = right, 2 = down, 3 = left
+        Some(match dir {
+            0 if p >= self.offset => p - self.offset,
+            1 if (p + 1) % self.offset != 0 => p + 1,
+            2 if p < self.data.len() - self.offset => p + self.offset,
+            3 if p % self.offset != 0 => p - 1,
+            _ => return None,
+        })
+    }
+    const fn find_s(&self) -> usize {
+        self.data.len() / 2
+    }
+}
 
-    for _ in 0..steps {
-        let mut new_positions: HashSet<(usize, usize)> = HashSet::new();
-        for position in positions {
-            let (y, x) = position;
-            if y > 0 && map[y - 1][x] == '.' {
-                new_positions.insert((y - 1, x));
+pub fn parse_grid(s: &str) -> (Grid, usize) {
+    let g = Grid::from_str(s);
+    let start = g.find_s();
+    (g, start)
+}
+
+fn part1(input: &str, steps: usize) -> Option<usize> {
+    let (g, start) = parse_grid(input);
+    let odd_bit = steps & 1;
+    let mut checked = g.data.iter().map(|c| *c == b'#').collect::<Vec<_>>();
+    let (mut set, mut set_next) = (Vec::new(), Vec::new());
+    let mut reach = 0;
+    checked[start] = true;
+    set.push(start);
+    for st in 0..=steps {
+        for &p in &set {
+            if st & 1 == odd_bit {
+                reach += 1;
             }
-            if y < map.len() - 1 && map[y + 1][x] == '.' {
-                new_positions.insert((y + 1, x));
-            }
-            if x > 0 && map[y][x - 1] == '.' {
-                new_positions.insert((y, x - 1));
-            }
-            if x < map[y].len() - 1 && map[y][x + 1] == '.' {
-                new_positions.insert((y, x + 1));
+            for dir in 0..4 {
+                if let Some(np) = g.next_pos(p, dir) {
+                    if !checked[np] {
+                        checked[np] = true;
+                        set_next.push(np);
+                    }
+                }
             }
         }
-        positions = new_positions;
+        set.clear();
+        std::mem::swap(&mut set, &mut set_next);
     }
-    positions.len()
+    Some(reach)
 }
 
-pub fn solve(input: &str) -> String {
-    let mut starting_point = (0, 0);
-    let map: Vec<Vec<char>> = input
-        .lines()
-        .enumerate()
-        .map(|(y, l)| {
-            l.chars()
-                .enumerate()
-                .map(|(x, char)| {
-                    if char == 'S' {
-                        starting_point = (y, x);
-                        '.'
-                    } else {
-                        char
-                    }
-                })
-                .collect()
-        })
-        .collect();
+pub fn part1_solve(input: &str) -> Option<usize> {
+    part1(input, 64)
+}
+pub fn part1_test(input: &str) -> Option<usize> {
+    part1(input, 6)
+}
 
-    let map_size = map.len();
-    let grid_size = 26501365 / map_size - 1;
+fn walk_wrapped<const N: usize>(g: &Grid, start: usize, steps: &[usize; N]) -> [usize; N] {
+    let mut vw = [0; N];
+    let mut checked = HashSet::new();
+    let (mut set, mut set_next) = (Vec::new(), Vec::new());
+    let mut reach = HashSet::new();
+    let sp = [(start % g.offset) as isize, (start / g.offset) as isize];
+    checked.insert(sp);
+    set.push(sp);
+    let mut st = 0;
+    let odd_bit = steps[0] & 1;
+    let mut si = 0;
+    while si < steps.len() {
+        for &p in &set {
+            if st & 1 == odd_bit {
+                reach.insert(p);
+            }
+            for dir in [[0, -1], [1, 0], [0, 1], [-1, 0]] {
+                let np = [p[0] + dir[0], p[1] + dir[1]];
+                let x = (np[0].rem_euclid(g.offset as isize)) as usize;
+                let y = (np[1].rem_euclid(g.offset as isize)) as usize;
+                if g.data[y * g.offset + x] == b'#' {
+                    continue;
+                }
+                if checked.insert(np) {
+                    set_next.push(np);
+                }
+            }
+        }
+        set.clear();
+        std::mem::swap(&mut set, &mut set_next);
+        st += 1;
+        if st == steps[si] + 1 {
+            vw[si] = reach.len();
+            si += 1;
+        }
+    }
+    vw
+}
 
-    let even_maps_in_grid = ((grid_size + 1) / 2 * 2).pow(2);
-    let odd_maps_in_grid = (grid_size / 2 * 2 + 1).pow(2);
+fn part2(input: &str) -> Option<usize> {
+    const STEPS: usize = 26501365;
+    let (g, start) = parse_grid(input);
+    let vx = [g.offset / 2, 3 * g.offset / 2, 5 * g.offset / 2];
+    let vy = walk_wrapped(&g, start, &vx);
+    // Use Lagrange polynomial
+    let mut result = 0.0;
+    for i in 0..3 {
+        let mut term = vy[i] as f64;
+        for j in 0..3 {
+            if i != j {
+                let num = (STEPS - vx[j]) as f64;
+                let den = vx[i] as f64 - vx[j] as f64;
+                term *= num / den;
+            }
+        }
+        result += term;
+    }
+    Some(result as usize)
+}
 
-    let odd_points_in_map = count_positions(&map, starting_point, map_size * 2 + 1);
-    let even_points_in_map = count_positions(&map, starting_point, map_size * 2);
+pub fn part2_test(input: &str) -> Option<[usize; 6]> {
+    let (g, start) = parse_grid(input);
+    Some(walk_wrapped(&g, start, &[6, 10, 50, 100, 500, 1000]))
+}
 
-    let total_points_fully_in_grid =
-        odd_points_in_map * odd_maps_in_grid + even_points_in_map * even_maps_in_grid;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let corner_top = count_positions(&map, (map_size - 1, starting_point.1), map_size - 1);
-    let corner_right = count_positions(&map, (starting_point.0, 0), map_size - 1);
-    let corner_bottom = count_positions(&map, (0, starting_point.1), map_size - 1);
-    let corner_left = count_positions(&map, (starting_point.0, map_size - 1), map_size - 1);
+    #[test]
+    fn part_1() {
+        let result = part1_test(
+            r"...........
+.....###.#.
+.###.##..#.
+..#.#...#..
+....#.#....
+.##..S####.
+.##..#...#.
+.......##..
+.##.#.####.
+.##..##.##.
+...........",
+        );
+        assert_eq!(result, Some(16));
+    }
 
-    let total_points_in_grid_corners = corner_top + corner_right + corner_bottom + corner_left;
-
-    let small_diag_top_right = count_positions(&map, (map_size - 1, 0), map_size / 2 - 1);
-    let small_diag_bottom_right = count_positions(&map, (0, 0), map_size / 2 - 1);
-    let small_diag_bottom_left = count_positions(&map, (0, map_size - 1), map_size / 2 - 1);
-    let small_diag_top_left = count_positions(&map, (map_size - 1, map_size - 1), map_size / 2 - 1);
-
-    let total_points_in_small_diags = (grid_size + 1)
-        * (small_diag_top_right
-            + small_diag_bottom_right
-            + small_diag_bottom_left
-            + small_diag_top_left);
-
-    let big_diag_top_right = count_positions(&map, (map_size - 1, 0), map_size * 3 / 2 - 1);
-    let big_diag_bottom_right = count_positions(&map, (0, 0), map_size * 3 / 2 - 1);
-    let big_diag_bottom_left = count_positions(&map, (0, map_size - 1), map_size * 3 / 2 - 1);
-    let big_diag_top_left =
-        count_positions(&map, (map_size - 1, map_size - 1), map_size * 3 / 2 - 1);
-
-    let total_points_in_big_diags = grid_size
-        * (big_diag_top_right + big_diag_bottom_right + big_diag_bottom_left + big_diag_top_left);
-
-    let total_points_in_diag = total_points_in_small_diags + total_points_in_big_diags;
-
-    (total_points_fully_in_grid + total_points_in_grid_corners + total_points_in_diag).to_string()
+    #[test]
+    fn part_2() {
+        let result = part2_test(
+            r"...........
+.....###.#.
+.###.##..#.
+..#.#...#..
+....#.#....
+.##..S####.
+.##..#...#.
+.......##..
+.##.#.####.
+.##..##.##.
+...........",
+        );
+        assert_eq!(result, Some([16, 50, 1594, 6536, 167004, 668697]));
+    }
 }

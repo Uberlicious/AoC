@@ -18,14 +18,6 @@ fn main() {
     println!("Part 2 - Time: {:?} Output {:?}", end - start, output);
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum MapExpand {
-    Left,
-    Right,
-    Up,
-    Down,
-}
-
 #[derive(Debug)]
 struct Garden {
     map: Box<[u8]>,
@@ -52,20 +44,14 @@ impl Garden {
         }
     }
 
-    fn next_pos(
-        &self,
-        p: (usize, BTreeSet<MapExpand>),
-        dir: u8,
-    ) -> Option<(usize, BTreeSet<MapExpand>)> {
+    fn next_pos(&self, p: (usize, (i32, i32)), dir: u8) -> Option<(usize, (i32, i32))> {
         // 0 = up, 1 = right, 2 = down, 3 = left
         Some(match dir {
             0 => {
                 if p.0 < self.offset {
-                    let mut m = p.1.clone();
-                    if !m.contains(&MapExpand::Down) {
-                        m.insert(MapExpand::Up);
-                    }
-                    println!("UP: {} => {}", p.0, self.map.len() - (self.offset - p.0));
+                    let mut m = p.1;
+                    m.1 -= 1;
+                    // println!("UP: {} => {}", p.0, self.map.len() - (self.offset - p.0));
                     return Some((self.map.len() - (self.offset - p.0), m));
                 }
 
@@ -73,23 +59,19 @@ impl Garden {
             }
             1 => {
                 if (p.0 + 1) % self.offset == 0 {
-                    let mut m = p.1.clone();
-                    if !m.contains(&MapExpand::Left) {
-                        m.insert(MapExpand::Right);
-                    }
-                    println!("Right: {} => {}", p.0, p.0 - self.offset + 1);
-                    return Some((p.0 - self.offset, m));
+                    let mut m = p.1;
+                    m.0 += 1;
+                    // println!("Right: {} => {}", p.0, p.0 + 1 - self.offset);
+                    return Some((p.0 + 1 - self.offset, m));
                 }
 
                 (p.0 + 1, p.1)
             }
             2 => {
                 if p.0 >= self.map.len() - self.offset {
-                    let mut m = p.1.clone();
-                    if !m.contains(&MapExpand::Up) {
-                        m.insert(MapExpand::Down);
-                    }
-                    println!("Down: {} => {}", p.0, self.offset - (self.map.len() - p.0));
+                    let mut m = p.1;
+                    m.1 += 1;
+                    // println!("Down: {} => {}", p.0, self.offset - (self.map.len() - p.0));
                     return Some((self.map.len() - p.0, m));
                 }
 
@@ -97,11 +79,9 @@ impl Garden {
             }
             3 => {
                 if p.0 % self.offset == 0 {
-                    let mut m = p.1.clone();
-                    if !m.contains(&MapExpand::Right) {
-                        m.insert(MapExpand::Left);
-                    }
-                    println!("Left: {} => {}", p.0, p.0 + self.offset - 1);
+                    let mut m = p.1;
+                    m.0 -= 1;
+                    // println!("Left: {} => {}", p.0, p.0 + self.offset - 1);
                     return Some((p.0 + self.offset - 1, m));
                 }
 
@@ -112,13 +92,13 @@ impl Garden {
     }
 
     fn step(&mut self, start: usize) -> usize {
-        let mut queue: BTreeSet<(usize, BTreeSet<MapExpand>)> = BTreeSet::new();
-        queue.insert((start, BTreeSet::new()));
+        let mut queue: BTreeSet<(usize, (i32, i32))> = BTreeSet::new();
+        queue.insert((start, (0, 0)));
         let mut step = self.steps;
 
         let output = loop {
             step -= 1;
-            let mut next: BTreeSet<(usize, BTreeSet<MapExpand>)> = BTreeSet::new();
+            let mut next: BTreeSet<(usize, (i32, i32))> = BTreeSet::new();
             while queue.len() > 0 {
                 let current = queue.pop_first().unwrap();
                 for dir in 0..4 {
@@ -140,7 +120,7 @@ impl Garden {
             queue = next;
         };
 
-        println!("output: {output:?} len: {}", output.len());
+        // println!("output: {output:?} len: {}", output.len());
 
         output.iter().len()
     }
@@ -227,5 +207,6 @@ mod tests {
 ...........";
         assert_eq!(part2(map, 10), 50);
         assert_eq!(part2(map, 50), 1594);
+        assert_eq!(part2(map, 1000), 668697);
     }
 }
