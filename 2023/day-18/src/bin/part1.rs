@@ -1,6 +1,6 @@
 use ansi_hex_color;
 use std::{
-    collections::{BTreeSet, HashSet, VecDeque},
+    collections::{BTreeSet, VecDeque},
     time::{SystemTime, UNIX_EPOCH},
 };
 
